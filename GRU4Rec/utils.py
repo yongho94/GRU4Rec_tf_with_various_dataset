@@ -1,101 +1,65 @@
-import os
-import numpy as np
-import pandas as pd
-import datetime as dt
-from tqdm import *
+import tensorflow as tf
 
-def prepro_movie(args, dataset_loc):
-    
-    data = pd.read_csv(dataset_loc, sep=',', header=0, dtype={0:np.int32, 1:np.int32, 2:np.float64, 3:np.int32})
-    print(" * Original Number of data :", len(data))
-    session_lengths = data.groupby('userId').size()
-    # truncated short sessions
-    data = data[np.in1d(data.userId, session_lengths[session_lengths >= args.minSessionLen].index)]
-    print(" * Truncated data by session", args.minSessionLen,":",len(data))
-    
-    movie_supports = data.groupby('movieId').size()
-    # truncated insufficiently occured movies
-    data = data[np.in1d(data.movieId, movie_supports[movie_supports >= args.minFreq].index)]
-    print(" * Truncated data by freq", args.minFreq,':', len(data))
+def initialize_func(args):
 
-    session_lengths = data.groupby('userId').size()
-    # truncated short sessions
-    data = data[np.in1d(data.userId, session_lengths[session_lengths >= args.minSessionLen].index)]
-    print(" * Truncated data by session", args.minSessionLen,":",len(data))
-    
-    data = data.sort_values(by=['userId', 'timestamp'], axis=0)
-    train_lengths = (session_lengths * args.train_ratio).astype(int)
-    
-    train_mask = []
-    for idx in tqdm(session_lengths.index, "Spliting data"):
-        train_mask += [True] * train_lengths[idx] 
-        train_mask += [False] * (session_lengths[idx] - train_lengths[idx])
-    
-    train_data = data[train_mask]
-    train_session_lengths = train_data.groupby('userId').size()
-    train_data = train_data[
-        np.in1d(train_data.userId, session_lengths[session_lengths >= args.minSessionLen].index)]
-    
-    train_data = train_data[['userId','movieId','timestamp']]
-    
-    new_columns = {'userId':'SessionId', 'movieId':'ItemId', 'timestamp':'Time'}
-    train_data = train_data.rename(columns=new_columns)
+    if args.gru_act == 'tanh':
+        gru_act = tanh
+    elif args.hidden_act == 'relu':
+        gru_act = relu
+    else:
+        raise NotImplementedError
 
-    print('Train set\n\tEvents: {}\n\tSessions: {}\n\tItems: {}'.format(len(train_data), train_data.SessionId.nunique(), train_data.ItemId.nunique()))
-    
-    vt_data = data
-    vt_data = vt_data[['userId','movieId','timestamp']]
-    vt_data = vt_data.rename(columns=new_columns)
+    if args.loss == 'cross-entropy':
+        if args.final_act == 'tanh':
+            final_act = softmaxth
+        else:
+            final_act = softmax
+        loss_function = cross_entropy
 
-    train_data.to_csv('./data/'+args.dataset[:-4]+'_train.txt', sep='\t', index=False)
-    vt_data.to_csv('./data/'+args.dataset[:-4]+'_valid_test.txt', sep='\t', index=False)
+    elif args.loss == 'bpr':
+        if args.final_act == 'linear':
+            final_act = linear
+        elif args.final_act == 'relu':
+            final_act = relu
+        else:
+            final_act = tanh
+        loss_function = bpr
 
-    print(' * Done')
-    return
+    elif args.loss == 'top1':
+        if args.final_act == 'linear':
+            final_act = linear
+        elif args.final_act == 'relu':
+            final_act = relu
+        else:
+            final_act = tanh
+        loss_function = get_top1(args)
+    else:
+        raise NotImplementedError
 
-def prepro_books(args, dataset_loc):
-    
-    data = pd.read_csv(dataset_loc, sep=',',header=None, 
-        names=['userId', 'bookId', 'rating', 'timestamp'], 
-        dtype={0:'category', 1:'category', 2:np.float64, 3:np.int32})
-    data['k_userId'] = data['userId'].cat.codes
-    data['k_bookId'] = data['bookId'].cat.codes
-    data = data[['k_userId', 'k_bookId', 'timestamp']]
-    data = data.rename(columns={'k_userId':'userId', 'k_bookId':'itemId','timestamp':'Time'})
-    
-    print("Original Number of data :", len(data))
-    session_lengths = data.groupby('userId').size()
-    # truncated short sessions
-    data = data[np.in1d(data.userId, session_lengths[session_lengths >= args.minSessionLen].index)]
-    print("Truncated data by session", args.minSessionLen,":",len(data))
-    
-    item_supports = data.groupby('itemId').size()
-    # truncated insufficiently occured movies
-    data = data[np.in1d(data.itemId, item_supports[item_supports >= args.minFreq].index)]
-    print("Truncated data by freq",args.minFreq, ':', len(data))
-    
-    session_lengths = data.groupby('userId').size()
-    # truncated short sessions
-    data = data[np.in1d(data.userId, session_lengths[session_lengths >= args.minSessionLen].index)]
-    print("Truncated data by session", args.minSessionLen,":",len(data))
-    
-    data = data.sort_values(by=['userId', 'Time'], axis=0)
-    session_lengths = data.groupby('userId').size()
-    train_lengths = (session_lengths * args.train_ratio).astype(int)
-    
-    train_mask = []
-    for idx in tqdm(session_lengths.index, "Splitting data"):
-        train_mask += [True] * train_lengths[idx] 
-        train_mask += [False] * (session_lengths[idx] - train_lengths[idx])
-        
-    train_data = data[train_mask]
-    train_session_lengths = train_data.groupby('userId').size()
-    train_data = train_data[
-        np.in1d(train_data.userId, session_lengths[session_lengths >= args.minSessionLen].index)]
-    
-    vt_data = data
-    train_data.to_csv('./data/'+args.dataset[:-4]+'_train.txt', sep='\t', index=False)
-    vt_data.to_csv('./data/'+args.dataset[:-4]+'_valid_test.txt', sep='\t', index=False)
-    
-    print(' * Done')
-    return
+    return gru_act, final_act, loss_function
+
+def linear(X):
+    return X
+def tanh(X):
+    return tf.nn.tanh(X)
+def softmax(X):
+    return tf.nn.softmax(X)
+def softmaxth(X):
+    return tf.nn.softmax(tf.tanh(X))
+def relu(X):
+    return tf.nn.relu(X)
+def sigmoid(X):
+    return tf.nn.sigmoid(X)
+def cross_entropy(yhat):
+    return tf.reduce_mean(-tf.log(tf.linalg.diag_part(yhat)+1e-24))
+def bpr(yhat):
+    yhatT = tf.transpose(yhat)
+    return tf.reduce_mean(-tf.log(tf.nn.sigmoid(tf.diag_part(yhat)-yhatT)))
+
+def get_top1(args):
+    def top1(yhat):
+        yhatT = tf.transpose(yhat)
+        term1 = tf.reduce_mean(tf.nn.sigmoid(-tf.linalg.diag_part(yhat)+yhatT)+tf.nn.sigmoid(yhatT**2), axis=0)
+        term2 = tf.nn.sigmoid(tf.linalg.diag_part(yhat)**2) / args.batch_size
+        return tf.reduce_mean(term1 - term2)
+    return top1
