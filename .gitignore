@@ -1,4 +1,3 @@
-dataset/*
 GRU4Rec/data/*
 *.ipynb
 *.txt
