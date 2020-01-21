@@ -1,4 +1,6 @@
 GRU4Rec/data/*
+__pycache__
+*.pyc
 *.ipynb
 *.txt
 *.csv

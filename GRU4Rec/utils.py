@@ -54,12 +54,12 @@ def cross_entropy(yhat):
     return tf.reduce_mean(-tf.log(tf.linalg.diag_part(yhat)+1e-24))
 def bpr(yhat):
     yhatT = tf.transpose(yhat)
-    return tf.reduce_mean(-tf.log(tf.nn.sigmoid(tf.diag_part(yhat)-yhatT)))
+    return tf.reduce_mean(-tf.log(tf.nn.sigmoid(tf.linalg.diag_part(yhat)-yhatT)))
 
 def get_top1(args):
     def top1(yhat):
         yhatT = tf.transpose(yhat)
         term1 = tf.reduce_mean(tf.nn.sigmoid(-tf.linalg.diag_part(yhat)+yhatT)+tf.nn.sigmoid(yhatT**2), axis=0)
-        term2 = tf.nn.sigmoid(tf.linalg.diag_part(yhat)**2) / args.batch_size
+        term2 = tf.nn.sigmoid(tf.diag_part(yhat)**2) / args.batch_size
         return tf.reduce_mean(term1 - term2)
     return top1
