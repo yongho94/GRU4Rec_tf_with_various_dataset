@@ -44,7 +44,6 @@ class Model():
         softmax_b = tf.get_variable('softmax_b', [n_items],
                                     initializer=tf.constant_initializer(0.0))
 
-        # what activation function should be used?
 
         cell = rnn_cell.GRUCell(args.hidden_size, activation=self.gru_act)
         drop_cell = rnn_cell.DropoutWrapper(cell, output_keep_prob=self.dropout)
@@ -60,7 +59,7 @@ class Model():
             sampled_b = tf.nn.embedding_lookup(softmax_b, self.y)
             sampled_logits = tf.matmul(output, sampled_W, transpose_b=True) + sampled_b
             self.sampled_yhat = self.final_activation(sampled_logits)
-            self.sampled_cost = self.loss_function(self.sampled_yhat)#tf.reduce_mean(-tf.log(tf.diag_part(sampled_logits)+1e-24))
+            self.sampled_cost = self.loss_function(self.sampled_yhat)
 
             self.lr = tf.maximum(1e-5,
                     tf.train.exponential_decay(args.lr, self.global_step, args.decay_steps,

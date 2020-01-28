@@ -1,6 +1,7 @@
-GRU4Rec/data/*
+*/log/*
+*/data/*
 __pycache__
-*.pyc
+*/*.pyc
 *.ipynb
 *.txt
 *.csv
